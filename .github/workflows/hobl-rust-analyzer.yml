@@ -1,0 +1,16 @@
+name: HOBL rust-analyzer baseline
+on:
+  push:
+    branches: [perf/hobl-baselines]
+    paths:
+      - '.github/hobl/**'
+      - '.github/workflows/hobl-*.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rust-analyzer:
+    uses: ./.github/workflows/hobl-cargo-baseline.yml
+    with:
+      workload: rust_analyzer_build
+      source-repo: marcpems/rust-analyzer

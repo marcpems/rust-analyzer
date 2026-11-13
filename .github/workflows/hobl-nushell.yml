@@ -1,0 +1,16 @@
+name: HOBL Nushell baseline
+on:
+  push:
+    branches: [perf/hobl-baselines]
+    paths:
+      - '.github/hobl/**'
+      - '.github/workflows/hobl-*.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nushell:
+    uses: ./.github/workflows/hobl-cargo-baseline.yml
+    with:
+      workload: nushell_build
+      source-repo: marcpems/nushell

@@ -1,0 +1,116 @@
+name: HOBL Cargo baseline runner
+
+on:
+  workflow_call:
+    inputs:
+      workload:
+        type: string
+        required: true
+      source-repo:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: ${{ inputs.workload }} / ${{ matrix.runner }}
+    timeout-minutes: 150
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            prefix: ''
+            python-arch: x64
+          - runner: windows-11-arm
+            prefix: ''
+            python-arch: arm64
+          - runner: ubuntu-24.04
+            prefix: lnx_
+            python-arch: x64
+          - runner: ubuntu-24.04-arm
+            prefix: lnx_
+            python-arch: arm64
+          - runner: macos-15-intel
+            prefix: mac_
+            python-arch: x64
+          - runner: macos-15
+            prefix: mac_
+            python-arch: arm64
+    env:
+      HOBL_RUNNER_LABEL: ${{ matrix.runner }}
+      WORKLOAD: ${{ inputs.workload }}
+      SCENARIO: ${{ matrix.prefix }}${{ inputs.workload }}
+      SOURCE_REPO: ${{ inputs.source-repo }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.12.10'
+          architecture: ${{ matrix.python-arch }}
+      - name: Set independent workload paths
+        shell: bash
+        run: |
+          echo "WORK_ROOT=$RUNNER_TEMP/hobl-$WORKLOAD-work" >> "$GITHUB_ENV"
+          echo "DATA_DIR=$RUNNER_TEMP/hobl-$WORKLOAD-results" >> "$GITHUB_ENV"
+      - name: Workload helper regressions
+        shell: bash
+        run: python -B -m unittest discover -s .github/hobl/tests -v
+      - name: Prepare Windows workload (not timed)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & .\.github\hobl\invoke.ps1 -Phase prep -Workload $env:WORKLOAD -Scenario $env:SCENARIO `
+            -WorkRoot $env:WORK_ROOT -DataDir $env:DATA_DIR -PythonExe '${{ steps.python.outputs.python-path }}' `
+            -Repository "https://github.com/$env:SOURCE_REPO.git"
+      - name: Prepare Unix workload (not timed)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          sh .github/hobl/invoke.sh prep "$WORKLOAD" "$SCENARIO" "$WORK_ROOT" "$DATA_DIR" \
+            1.100.0 0 1 '${{ steps.python.outputs.python-path }}' "https://github.com/$SOURCE_REPO.git"
+      - name: Three clean offline Windows builds
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($sample in 1..3) {
+            & .\.github\hobl\invoke.ps1 -Phase run -Workload $env:WORKLOAD -Scenario $env:SCENARIO `
+              -WorkRoot $env:WORK_ROOT -DataDir $env:DATA_DIR -Sample $sample
+            if ($LASTEXITCODE -ne 0) { throw " ERROR - Sample $sample failed." }
+          }
+      - name: Three clean offline Unix builds
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          for sample in 1 2 3; do
+            sh .github/hobl/invoke.sh run "$WORKLOAD" "$SCENARIO" "$WORK_ROOT" "$DATA_DIR" 1.100.0 0 "$sample"
+          done
+      - name: Teardown Windows build outputs (not timed)
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:WORK_ROOT\.hobl-rust-workload.json") {
+            & .\.github\hobl\invoke.ps1 -Phase teardown -Workload $env:WORKLOAD -Scenario $env:SCENARIO `
+              -WorkRoot $env:WORK_ROOT -DataDir $env:DATA_DIR
+          }
+      - name: Teardown Unix build outputs (not timed)
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ -f "$WORK_ROOT/.hobl-rust-workload.json" ]; then
+            sh .github/hobl/invoke.sh teardown "$WORKLOAD" "$SCENARIO" "$WORK_ROOT" "$DATA_DIR"
+          fi
+      - name: Upload independent workload measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.workload }}-${{ matrix.runner }}
+          path: ${{ env.DATA_DIR }}
+          if-no-files-found: warn
+          retention-days: 30
