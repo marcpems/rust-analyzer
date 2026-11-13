@@ -33,10 +33,14 @@ def write_json(path, value):
 
 
 def capture(command, **kwargs):
-    return subprocess.check_output(
-        [str(arg) for arg in command], text=True, encoding="utf-8",
-        errors="replace", stderr=subprocess.STDOUT, **kwargs
-    ).strip()
+    arguments = command if isinstance(command, str) else [str(arg) for arg in command]
+    try:
+        return subprocess.check_output(
+            arguments, text=True, encoding="utf-8",
+            errors="replace", stderr=subprocess.STDOUT, **kwargs
+        ).strip()
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"Command failed ({error.returncode}): {arguments}\n{error.output}") from error
 
 
 def architecture():
@@ -69,13 +73,18 @@ def native_environment():
             vswhere = str(installer / "vswhere.exe")
         if not Path(vswhere).is_file():
             raise RuntimeError("Visual Studio Installer/vswhere is missing. Install native C++ build tools.")
-        vs_path = capture([vswhere, "-latest", "-products", "*", "-property", "installationPath"])
+        component = "Microsoft.VisualStudio.Component.VC.Tools." + (
+            "ARM64" if architecture() == "arm64" else "x86.x64"
+        )
+        vs_path = capture([vswhere, "-latest", "-products", "*", "-requires", component,
+                           "-property", "installationPath"])
         devcmd = Path(vs_path) / "Common7" / "Tools" / "VsDevCmd.bat"
         if not vs_path or not devcmd.is_file():
             raise RuntimeError("A Visual Studio installation with VsDevCmd.bat is required.")
         arch = architecture()
         command = f'call "{devcmd}" -no_logo -arch={arch} -host_arch={arch} >nul && set'
-        output = capture([os.environ["COMSPEC"], "/d", "/s", "/c", command])
+        # cmd.exe does not implement the C-runtime backslash/quote escaping used by list2cmdline.
+        output = capture(f'"{os.environ["COMSPEC"]}" /d /s /c "{command}"')
         for line in output.splitlines():
             key, sep, value = line.partition("=")
             if sep and key and not key.startswith("="):

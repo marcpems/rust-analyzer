@@ -15,6 +15,16 @@ SPEC.loader.exec_module(build)
 
 
 class BuildTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows command-line quoting")
+    def test_cmd_batch_path_with_spaces(self):
+        with tempfile.TemporaryDirectory(prefix="hobl command ") as directory:
+            batch = Path(directory) / "developer tools.cmd"
+            batch.write_text("@echo off\nset HOBL_QUOTE_TEST=passed\n", encoding="ascii")
+            output = build.capture(
+                f'"{os.environ["COMSPEC"]}" /d /s /c "call "{batch}" >nul && set HOBL_QUOTE_TEST"'
+            )
+            self.assertEqual(output, "HOBL_QUOTE_TEST=passed")
+
     def test_environment_removes_external_overrides_not_project_config(self):
         env = build.build_environment(Path("owned"), "1.100.0", {
             "PATH": "native", "CARGO_PROFILE_RELEASE_LTO": "false",

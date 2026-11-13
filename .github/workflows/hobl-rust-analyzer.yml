@@ -6,6 +6,10 @@ on:
       - '.github/hobl/**'
       - '.github/workflows/hobl-*.yml'
   workflow_dispatch:
+    inputs:
+      windows-only:
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -14,3 +18,4 @@ jobs:
     with:
       workload: rust_analyzer_build
       source-repo: marcpems/rust-analyzer
+      windows-only: ${{ inputs.windows-only || false }}

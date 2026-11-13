@@ -9,6 +9,9 @@ on:
       source-repo:
         type: string
         required: true
+      windows-only:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,25 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: windows-2025
-            prefix: ''
-            python-arch: x64
-          - runner: windows-11-arm
-            prefix: ''
-            python-arch: arm64
-          - runner: ubuntu-24.04
-            prefix: lnx_
-            python-arch: x64
-          - runner: ubuntu-24.04-arm
-            prefix: lnx_
-            python-arch: arm64
-          - runner: macos-15-intel
-            prefix: mac_
-            python-arch: x64
-          - runner: macos-15
-            prefix: mac_
-            python-arch: arm64
+        include: ${{ fromJSON(inputs.windows-only && '[{"runner":"windows-2025","prefix":"","python-arch":"x64"},{"runner":"windows-11-arm","prefix":"","python-arch":"arm64"}]' || '[{"runner":"windows-2025","prefix":"","python-arch":"x64"},{"runner":"windows-11-arm","prefix":"","python-arch":"arm64"},{"runner":"ubuntu-24.04","prefix":"lnx_","python-arch":"x64"},{"runner":"ubuntu-24.04-arm","prefix":"lnx_","python-arch":"arm64"},{"runner":"macos-15-intel","prefix":"mac_","python-arch":"x64"},{"runner":"macos-15","prefix":"mac_","python-arch":"arm64"}]') }}
     env:
       HOBL_RUNNER_LABEL: ${{ matrix.runner }}
       WORKLOAD: ${{ inputs.workload }}
